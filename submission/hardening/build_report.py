@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Assemble the single-file HTML report (embeds SVG figures + verbatim sim logs).
 import json, os, html
-B="C:/csaw26/work/submission"
-H=B+"/hardening"
+H=os.path.dirname(os.path.abspath(__file__))     # hardening/
+B=os.path.dirname(H)                              # submission root
 def rd(p):
     return open(p, encoding="utf-8").read()
 def svg(p):

@@ -125,3 +125,46 @@ Q: does "recovered S-box/key bytes" == the key used by the FPGA accelerator? A: 
 - README.md section 2.3 updated with exact values + method.
 - NOTE: 0xC0DECAFE is the hardened core's key (what the Trojan leaks), NOT the
   recovered device key.
+
+### From-scratch bootstrap script  [DONE]
+- rebuild_from_scratch.sh : ONE self-contained script for a teammate with nothing
+  installed. Installs OSS CAD Suite (Icarus/GTKWave/Yosys/IceStorm), downloads ONLY
+  the official bitstream (JBlocklove repo, qualifier/), writes every source file
+  from embedded heredocs, and runs reverse -> recover -> harden -> build -> exploit
+  -> report with no user input.
+- Built by hardening/make_bootstrap.py (embeds 17 authored source files).
+- New helper scripts so the whole thing regenerates: hardening/gen_core.py
+  (emits crypto_core.v + sbox_feistel.mem), hardening/make_figures.py (numpy-free
+  SVGs), recovery/probe_key.py (key evidence). Fixed build_report.py to use paths
+  relative to __file__ (was hardcoded).
+- CERTIFIED end-to-end in a fresh dir (SKIP_TOOL_INSTALL reuses toolchain):
+  bitstream 104090 OK; VALIDATE ALL PASS; TB_TROJAN ALL PASS; overhead 105 vs 103
+  FF = +2 FF; PDF 144 KB; 0 leftover intermediates.
+- Run: `bash rebuild_from_scratch.sh [OUT_DIR]`  (env: SKIP_TOOL_INSTALL=1, SKIP_PDF=1)
+
+### rebuild_from_scratch.sh reworked -> AI-generation orchestrator (no embedded code)
+Per teammate request, the bootstrap no longer embeds our source files. It now:
+  1. installs OSS CAD Suite, 2. ensures the Claude Code CLI, 3. opens a NEW project
+  dir, 4. downloads ONLY the official bitstream, 5. writes BUILD_PROMPT.md (a
+  thorough, code-free methodology covering all 9 stages + a mandatory self-checking
+  run_all.sh with SELFTEST_GOLDEN/SELFTEST_EXPLOIT sentinels), 6. launches Claude
+  Code in that project seeded with the prompt so the AI writes every file itself,
+  7. runs the AI-generated run_all.sh to show PASS/FAIL.
+- SAFETY: launches Claude Code INTERACTIVELY (supervised), NOT with permissions
+  disabled and NOT in an auto-respawning agent loop. An earlier draft that wired
+  `claude --dangerously-skip-permissions` in an auto-repair loop was (correctly)
+  blocked as an unsafe-autonomous-agent pattern; the interactive design gives the
+  same result with a human approving actions (Shift+Tab enables auto-accept).
+- Removed hardening/make_bootstrap.py (it embedded code for the old approach).
+- VERIFIED: `bash -n` clean; plumbing test (SKIP_TOOL_INSTALL, sourced funcs)
+  created the dir tree, downloaded the bitstream (104090 bytes), and wrote the
+  62-line methodology prompt with zero embedded RTL/code. The claude launch itself
+  is not run here (needs the teammate's authenticated Claude Code).
+
+### rebuild_from_scratch.sh made model-agnostic + pushed to GitHub
+- Per teammate: removed all Claude Code setup/launch. The script now only
+  prepares the environment (OSS CAD Suite), downloads the bitstream, and writes
+  BUILD_PROMPT.md (model-agnostic methodology). Any AI agent can then follow the
+  prompt to regenerate the project; if a run_all.sh exists it is run to show PASS.
+- Pushed the full submission folder to https://github.com/KennethLei1492/CSAW26
+  (into submission/, plus refreshed submission.zip).

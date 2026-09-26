@@ -54,6 +54,17 @@ Run everything (needs OSS CAD Suite + python3 on PATH):
 ./run_all.sh sim      # just build the RTL and run both testbenches
 ```
 
+**Starting from nothing?** `rebuild_from_scratch.sh` is a single self-contained
+script for a teammate with no tools installed: it installs the OSS CAD Suite
+(Icarus Verilog, GTKWave, Yosys, IceStorm), downloads only the official challenge
+bitstream, writes every source file from scratch, and runs the whole
+reverse → recover → harden → build → exploit → report pipeline with no input.
+
+```
+bash rebuild_from_scratch.sh [OUTPUT_DIR]     # default ./csaw26_submission
+# env: SKIP_TOOL_INSTALL=1 (reuse tools already on PATH), SKIP_PDF=1
+```
+
 ---
 
 ## 1. Reverse-engineering the bitstream

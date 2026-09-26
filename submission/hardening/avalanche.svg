@@ -1026,5 +1026,4 @@
 <rect x="434" y="447" width="12" height="12" fill="#2e9f42"/>
 <rect x="447" y="447" width="12" height="12" fill="#2f9e42"/>
 <text x="44" y="478" fill="#333">rows = input bit i, cols = output bit j. Uniform green = ideal diffusion.</text>
-<rect x="310" y="480" width="14" height="14" fill="#2ea043"/><text x="328" y="491" fill="#333">p=0.50 (ideal)</text>
 </svg>

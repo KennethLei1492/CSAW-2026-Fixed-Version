@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  rebuild_from_scratch.sh
+#  CSAW'26 AI Hardware Attack - Qualifier : PREPARE + AI BUILD PROMPT
+# -----------------------------------------------------------------------------
+#  This script contains NO source code from the project. It prepares a clean
+#  environment and emits a detailed, MODEL-AGNOSTIC methodology prompt that ANY
+#  AI coding agent can follow to regenerate the entire submission from scratch.
+#
+#  Running it (no user input):
+#     1. installs the OSS CAD Suite (Icarus Verilog, GTKWave, Yosys, IceStorm),
+#     2. opens a NEW empty project directory,
+#     3. downloads ONLY the challenge bitstream into it (the sole allowed input,
+#        from JBlocklove/CSAW-AI-Hardware-Attack-Challenge-2026, qualifier/),
+#     4. writes BUILD_PROMPT.md - the full methodology, with no code snippets.
+#
+#  Then point the AI model of your choice at BUILD_PROMPT.md (paste it in, or run
+#  your agent in the project directory) to have it write every RTL / testbench /
+#  analysis / report file and a self-checking run_all.sh. If a run_all.sh already
+#  exists when this script finishes, it will run it and show the PASS/FAIL result.
+#
+#  Requirements: bash, curl (or wget), tar, python3 (used by the generated
+#  scripts). No AI-vendor tooling is assumed or configured here.
+#
+#  Usage:  bash rebuild_from_scratch.sh [PROJECT_DIR]      # default ./csaw26_ai_build
+#  Env:    SKIP_TOOL_INSTALL=1   reuse an OSS CAD Suite already on PATH
+# =============================================================================
+set -uo pipefail
+
+PROJECT_DIR="${1:-$PWD/csaw26_ai_build}"
+REPO_RAW="https://raw.githubusercontent.com/JBlocklove/CSAW-AI-Hardware-Attack-Challenge-2026/main/qualifier"
+OSS_DATE="20260920"; OSS_TAG="2026-09-20"
+OSS_BASE="https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${OSS_TAG}"
+
+say(){ printf '\n\033[1;36m==== %s ====\033[0m\n' "$*"; }
+warn(){ printf '\033[1;33m%s\033[0m\n' "$*" >&2; }
+die(){ printf '\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
+have(){ command -v "$1" >/dev/null 2>&1; }
+fetch(){ if have curl; then curl -fL --retry 3 -o "$2" "$1"; elif have wget; then wget -q -O "$2" "$1"; else die "need curl or wget"; fi; }
+
+# ---------------------------------------------------------------------------
+setup_tools(){
+  if [ "${SKIP_TOOL_INSTALL:-0}" = "1" ] || { have iverilog && have yosys && have icepack; }; then
+    say "OSS CAD Suite already available - skipping install"
+    export OSS_ROOT="$(dirname "$(dirname "$(command -v yosys)")")"; return
+  fi
+  say "Installing OSS CAD Suite (Icarus Verilog, GTKWave, Yosys, IceStorm)"
+  local os arch plat tgz suite
+  case "$(uname -s)" in
+    Linux) os=linux;; Darwin) os=darwin;; MINGW*|MSYS*|CYGWIN*) os=windows;;
+    *) die "unsupported OS $(uname -s)";; esac
+  case "$(uname -m)" in
+    x86_64|amd64) arch=x64;; arm64|aarch64) arch=arm64;;
+    *) die "unsupported arch $(uname -m)";; esac
+  plat="${os}-${arch}"; mkdir -p "$PROJECT_DIR"; tgz="$PROJECT_DIR/oss-cad-suite.tgz"
+  echo "platform: $plat"
+  fetch "${OSS_BASE}/oss-cad-suite-${plat}-${OSS_DATE}.tgz" "$tgz" || die "OSS CAD Suite download failed"
+  say "Extracting toolchain (large; please wait)"
+  tar -xzf "$tgz" -C "$PROJECT_DIR"; suite="$PROJECT_DIR/oss-cad-suite"
+  [ -d "$suite" ] || die "extract did not produce $suite"
+  export OSS_ROOT="$suite"
+  [ -f "$suite/environment" ] && . "$suite/environment"
+  export PATH="$suite/bin:$suite/lib:$PATH"
+  [ -f "$suite/etc/cacert.pem" ] && export SSL_CERT_FILE="$suite/etc/cacert.pem"
+  have iverilog && have yosys && have icepack || die "toolchain not on PATH after install"
+}
+
+scaffold(){
+  say "Opening a new project at: $PROJECT_DIR"
+  mkdir -p "$PROJECT_DIR"/{rtl,tb,recovery,hardening,ai}
+}
+
+download_bitstream(){
+  say "Downloading the ONLY permitted input: the official challenge bitstream"
+  fetch "$REPO_RAW/ice40_bitstream.bin" "$PROJECT_DIR/recovery/ice40_bitstream.bin" \
+    || die "bitstream download failed"
+  fetch "$REPO_RAW/ice40_cryptographic_IP.md"   "$PROJECT_DIR/recovery/ref_ip_doc.md" 2>/dev/null || true
+  fetch "$REPO_RAW/spi_ice40_crypto_ip_test.py" "$PROJECT_DIR/recovery/ref_micropython.py" 2>/dev/null || true
+  local n; n=$(wc -c < "$PROJECT_DIR/recovery/ice40_bitstream.bin")
+  echo "bitstream bytes: $n (expected 104090)"
+}
+
+# ---------------------------------------------------------------------------
+# The methodology prompt - the ONLY substantive content of this script.
+# Plain-English, model-agnostic instructions; no code from the reference project.
+write_prompt(){
+  say "Writing the model-agnostic methodology prompt (BUILD_PROMPT.md)"
+  cat > "$PROJECT_DIR/BUILD_PROMPT.md" <<'PROMPT_EOF'
+# TASK: Reverse-engineer an FPGA crypto accelerator, then insert and prove a stealthy hardware Trojan. Write ALL files yourself.
+
+You are competing in the CSAW'26 AI Hardware Attack qualifier. Produce every RTL, testbench, analysis-script, and report file yourself; do not copy any pre-existing files. Work entirely inside the CURRENT directory. Keep an engineering log at LOG.md as you go, and self-test after every stage.
+
+## Environment and the ONLY allowed input
+- The target is a Lattice iCE40-UP5K FPGA holding a small 32-bit SPI cryptographic accelerator. Its RTL is NOT given; recover it from the bitstream.
+- The ONE input you may use is the bitstream already at `recovery/ice40_bitstream.bin`. Download nothing else.
+- Installed tools on PATH: `icepack`, `icebox_vlog`, `iverilog`, `vvp`, `yosys`, `gtkwave`, `python3`. Use only these plus standard shell.
+- Optional references you may read (not required): `recovery/ref_ip_doc.md`, `recovery/ref_micropython.py`. The documented interface: a unified SCK clock (<=1 MHz) clocks the whole design; active-low synchronous RST_N; SPI mode 0, MSB-first; NORM_CS_N is the active-low chip-select / shift-enable; START begins an operation; ENC_DEC selects 0=encrypt / 1=decrypt; BUSY is high for ~4 clocks while processing; ICE_LED mirrors BUSY; MISO/MOSI are serial data. The one published test vector is encrypt(0x59C359C3) = 0x9CD84392.
+
+## GLOBAL RULE: self-test until green. Actually RUN the tools after each stage; never declare success until the compiled simulations pass. All hardware must be AI-written.
+
+## STAGE 1 - Bitstream to a simulatable netlist
+1. Unpack with `icepack -u` to the ASCII form. PROVE it is loss-less by repacking with `icepack` and confirming byte-identical to the original (`cmp`).
+2. Lift to a structural Verilog netlist with `icebox_vlog`. Expect ~71 flip-flops, four identical `SB_RAM40_4K` block RAMs (the S-box), and 9 top I/O named by location (e.g. io_9_31_1).
+3. Make it simulate like real silicon (patched copy):
+   - `icebox_vlog` declares the one registered output twice; merge into a single `output reg`.
+   - Initialize every fabric flip-flop AND the BRAM output register to 0. Real iCE40 flip-flops power up to 0, but Icarus starts regs at X; without this the datapath fills with X. Copy the iCE40 `cells_sim.v` model from the yosys install (under the OSS CAD Suite share/yosys/ice40 folder) for `SB_RAM40_4K` and set its read-data register initial value to 0.
+
+## STAGE 2 - Pin map and datapath
+1. SCK is the net clocking all flip-flops; the LED output is a plain `assign` copy of BUSY; MISO is the only registered output.
+2. Resolve RST_N, MOSI, NORM_CS_N, START, ENC_DEC by an AUTOMATED search: a Python harness that generates an Icarus testbench per candidate permutation, simulates, and scores each against (a) the SPI read-back self-test (write 32 bits, read them back, must match) and (b) the "BUSY high ~4 cycles after START" behavior. Keep the permutation satisfying both.
+3. Find the 32-bit datapath/shift register by one-hot stimulus: drive a single 1 bit in and diff the flip-flops; each input bit maps to exactly one flip-flop. Record the bit-to-FF map to read the datapath in simulation.
+
+## STAGE 3 - CRITICAL timing, then characterize
+- Drive the core race-free, like a real SPI controller: change inputs while SCK is LOW with a real setup delay before each rising edge, and clear START only while SCK is low. If START is de-asserted in the same instant as a clock edge, the pulse widens and the cipher returns wrong (even input-independent) results. This is what makes the netlist reproduce the published vector.
+- Using the netlist as a simulation ORACLE driven this way, establish: it is a 32-bit block cipher with a key baked into the bitstream (no key over SPI); ENC_DEC=0 encrypts and 1 decrypts and they are exact inverses; and by flipping one input bit at a time that the cipher is BYTE-LOCAL (each input byte affects only its own output byte) - i.e. four independent 8-bit keyed bijections, no diffusion.
+
+## STAGE 4 - Extract the cipher and recover the key (bonus)
+1. Because it is byte-local, capture all four byte-lane permutations in 256 oracle queries: drive the input equal to v repeated in all four bytes (v=0..255) and read the four output bytes. That yields four 256-entry forward tables (encrypt) and their inverses (decrypt); each must be a bijection. Emit them as `$readmemh` hex memory files under rtl/.
+2. Document the key: the device has no SPI-loaded key - the secret is (a) the 256-byte S-box read from the BRAM INIT parameters of the netlist and (b) the four lane tables; both must reproduce encrypt(0x59C359C3)=0x9CD84392. Probe the internal round-state registers cycle by cycle to show a non-standard schedule (constant keying bytes appear on alternate cycles), i.e. the key is distributed across S-box and routing rather than one short value; the S-box + tables ARE the recovered key.
+
+## STAGE 5 - Clean reconstruction (reverse-engineering proof)
+- Write a clean, synthesizable SPI-peripheral top plus a "recovered-cipher" core that applies the recovered per-byte tables (forward for ENC_DEC=0, inverse for =1). Match the documented pin interface and the 4-cycle BUSY timing: on START capture the operand, hold BUSY 4 clocks, and on BUSY's falling edge parallel-load the result into the shift register for read-out; MISO is a registered copy of the shift-register MSB so a controller sampling on the rising edge reads the word back verbatim. Verify a testbench: this core reproduces encrypt(0x59C359C3)=0x9CD84392 and decrypt inverts encrypt.
+
+## STAGE 6 - HARDEN the cipher (keep the interface identical)
+The recovered cipher is weak (no diffusion; breakable one byte at a time). Replace the datapath - keeping the SAME pin interface, 4-cycle BUSY timing, and read-back path - with a strong cipher:
+- Use a balanced FEISTEL network (invertible by construction). Split the 32-bit block into two 16-bit halves. The round function: XOR in a 16-bit round key, pass each byte through the recovered 8-bit S-box (nonlinearity), then apply an invertible linear diffusion (XOR of two different left-rotations of the 16-bit word). Use ~12 rounds; expand a 32-bit hard-wired master key into the round keys with a simple schedule.
+- SELF-TEST in a small Python reference first: confirm decrypt inverts encrypt over thousands of random inputs, and measure the Strict Avalanche Criterion (flip one input bit, count output-bit flips). Tune the round count and the two rotation amounts until avalanche is ideal - about 16 of 32 output bits (~50%) flip per input-bit flip, uniformly. Then implement the identical cipher in synthesizable Verilog and cross-check the RTL against the Python reference bit-for-bit (encrypt, decrypt, round-trip) over many random vectors.
+
+## STAGE 7 - Insert the hardware Trojan
+Add a stealthy Trojan to the hardened core:
+- TRIGGER: a two-block "knock" in ENCRYPT mode. Processing a first magic plaintext ARMS it; if the VERY NEXT encryption processes a second magic plaintext, it FIRES. Any other operand in between, or a knock in decrypt mode, silently disarms. Choose two 32-bit magic constants (accidental-trigger probability ~2^-64).
+- PAYLOAD: precise key exfiltration. On the firing block, load a 32-bit SECRET_KEY register into the result instead of the true ciphertext, so the next read-out streams the key on MISO. Only that one block is affected; normal before and after.
+- STEALTH: a tiny 2-bit FSM (armed, fire) plus two 32-bit equality compares and one 32-bit output mux - a couple of flip-flops, no timing/BUSY change, no extra BRAM. Add a parameter (e.g. TROJAN_EN, default enabled) so a "clean twin" with the Trojan disabled can be instantiated.
+
+## STAGE 8 - Prove it: testbenches
+- Validation TB: drive the recovered core over the real SPI protocol and assert encrypt(0x59C359C3)=0x9CD84392 and decrypt(that)=0x59C359C3.
+- Exploit TB: instantiate the Trojaned core AND an identical clean twin (Trojan disabled), driven in lock-step over SPI. Assert that for every non-trigger transaction - assorted values plus several dozen random encrypt/decrypt ops - both cores give BIT-IDENTICAL MISO output; that a lone knock, a broken knock sequence, and a decrypt-mode knock never leak; and that after the two-block knock the Trojaned core streams SECRET_KEY on MISO while the clean twin returns the real ciphertext (diverge only at the trigger, then re-converge).
+
+## STAGE 9 - Overhead, report, one-click pipeline
+- Measure Trojan cost with `yosys` `synth_ice40`: synthesize the top with the Trojan enabled vs disabled and compare flip-flop counts (expect ~+2 flip-flops, no extra BRAM). On some hosts the final AIGER writer aborts; stop synthesis before LUT mapping to read register/BRAM counts, and treat any writer abort as non-fatal.
+- Generate a concise technical report as an HTML file (also render to PDF if a headless Chrome/Edge or wkhtmltopdf is available, else leave HTML). Include: original-RTL analysis and faithfulness proof; how the cipher works and why it is weak (draw weak-vs-hardened avalanche heat-maps as simple SVGs from Python with no external libraries); the hardening and its avalanche; the Trojan trigger/payload/stealth and measured overhead; verbatim simulation logs; reproduction steps; and a severity section with CVSS v3.1 vector AV:L/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N (base ~9.0, Critical) and CWE mapping CWE-506 (Embedded Malicious Code), CWE-912 (Hidden Functionality), CWE-200 (Exposure of Sensitive Information), CWE-321 (Use of Hard-coded Cryptographic Key). Also write a README.md describing the tree and how to run everything.
+
+## MANDATORY: a self-checking `run_all.sh`
+Create an executable `run_all.sh` in the project root that rebuilds and re-simulates everything end to end. It must compile with no errors and, at the very end, print these two sentinel lines and exit 0 ONLY if both hold:
+- `SELFTEST_GOLDEN: PASS`  - only when the recovered core yields encrypt(0x59C359C3)=0x9CD84392 and the decrypt round-trip matches.
+- `SELFTEST_EXPLOIT: PASS` - only when the exploit testbench confirms perfect stealth on all non-trigger traffic AND the knock leaks the key.
+If either check fails, print a clear failure line and exit non-zero. Before finishing, RUN `run_all.sh` yourself and keep fixing until it prints both PASS lines and exits 0.
+
+## Suggested layout
+rtl/ (top + recovered core + hardened Trojaned core + memory files), tb/ (validation + exploit), recovery/ (unpack/lift/extract/key scripts + the bitstream), hardening/ (cipher design + figures + report builder), README.md, LOG.md, and the report. Everything reproducible from `run_all.sh`.
+PROMPT_EOF
+  echo "prompt written to $PROJECT_DIR/BUILD_PROMPT.md ($(wc -l < "$PROJECT_DIR/BUILD_PROMPT.md") lines)"
+}
+
+final_note(){
+  if [ -f "$PROJECT_DIR/run_all.sh" ]; then
+    say "An AI-generated run_all.sh is present - running the self-test pipeline"
+    ( cd "$PROJECT_DIR" && bash run_all.sh ) || warn "run_all.sh reported a failure - see output above"
+  else
+    say "Environment ready - now hand the prompt to any AI coding agent"
+    cat <<EOF
+Next step (model-agnostic):
+  1. Point your AI coding agent at this project directory:
+        $PROJECT_DIR
+  2. Give it the instruction:  "Read BUILD_PROMPT.md and carry out the whole task,
+     writing every file yourself and iterating until run_all.sh prints
+     SELFTEST_GOLDEN: PASS and SELFTEST_EXPLOIT: PASS."
+  3. When it finishes, verify:   ( cd "$PROJECT_DIR" && bash run_all.sh )
+EOF
+  fi
+}
+
+# ---------------------------------------------------------------------------
+main(){
+  mkdir -p "$PROJECT_DIR"
+  setup_tools
+  scaffold
+  download_bitstream
+  write_prompt
+  final_note
+  say "DONE"
+  echo "Project: $PROJECT_DIR"
+  echo "Prompt : $PROJECT_DIR/BUILD_PROMPT.md"
+}
+main "$@"
