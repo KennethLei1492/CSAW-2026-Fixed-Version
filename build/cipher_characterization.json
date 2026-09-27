@@ -1,0 +1,31 @@
+{
+  "block_bits": 32,
+  "key": "hard-wired in the bitstream (no key is sent over SPI)",
+  "modes": {
+    "encrypt": "ENC_DEC=0",
+    "decrypt": "ENC_DEC=1"
+  },
+  "busy_cycles": 4,
+  "golden_vector": {
+    "plaintext": "0x59C359C3",
+    "ciphertext": "0x9CD84392",
+    "expected": "0x9CD84392",
+    "reproduced": true
+  },
+  "byte_local": true,
+  "byte_locality_map": {
+    "input_byte_0": [
+      0
+    ],
+    "input_byte_1": [
+      1
+    ],
+    "input_byte_2": [
+      2
+    ],
+    "input_byte_3": [
+      3
+    ]
+  },
+  "encrypt_decrypt_inverse": true
+}

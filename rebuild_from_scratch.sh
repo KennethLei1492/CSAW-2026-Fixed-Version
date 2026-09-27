@@ -146,14 +146,31 @@ The AST tool should identify, as tree nodes, these insertion points and explain 
 - Measure Trojan cost with `yosys` `synth_ice40`: synthesize the top with the Trojan enabled vs disabled and compare flip-flop counts (expect ~+2 flip-flops, no extra BRAM). On some hosts the final AIGER writer aborts; stop synthesis before LUT mapping to read register/BRAM counts, and treat any writer abort as non-fatal.
 - Generate a concise technical report as an HTML file (also render to PDF if a headless Chrome/Edge or wkhtmltopdf is available, else leave HTML). Include: original-RTL analysis and faithfulness proof; how the cipher works and why it is weak (draw weak-vs-hardened avalanche heat-maps as simple SVGs from Python with no external libraries); the hardening and its avalanche; the Trojan trigger/payload/stealth and measured overhead; verbatim simulation logs; reproduction steps; and a severity section with CVSS v3.1 vector AV:L/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N (base ~9.0, Critical) and CWE mapping CWE-506 (Embedded Malicious Code), CWE-912 (Hidden Functionality), CWE-200 (Exposure of Sensitive Information), CWE-321 (Use of Hard-coded Cryptographic Key). Also write a README.md describing the tree and how to run everything.
 
+## STAGE 10 - Structure it as a 5-stage pipeline with immediate checks
+Wrap the work in an orchestrator (pipeline/run_pipeline.py) that runs five stages and asserts a machine-checked result after EACH one:
+- Stage 1 Reverse Engineering: in ice40_bitstream.bin -> out build/pin_map.json, build/cipher_characterization.json; check the golden vector 0x59C359C3 -> 0x9CD84392 is reproduced by the netlist oracle.
+- Stage 2 Cipher Recovery: in pin_map.json + netlist oracle -> out build/sbox_tables.json (the key material); check each byte lane is a bijection and decrypt == encrypt^-1.
+- Stage 3 Hardening Model: in sbox_tables.json + design constraints (from the qualifier repo) -> out hardening/hardened_params.json + rtl/crypto_core_clean.v; check avalanche ~= 0.5 and invertibility over N random vectors.
+- Stage 4 Trojan Insertion: in crypto_core_clean.v + hardening/trojan_spec.json -> out rtl/crypto_core.v + hardening/AST_INSERTION_POINTS.md; check tb_trojan passes and the flip-flop overhead is < 3.
+- Stage 5 Verification: in all RTL + all testbenches -> out build/verification_report.json; check every prior stage passed.
+
+## STAGE 11 - RAG over the documentation
+Install ChromaDB (and sentence-transformers if the platform allows; otherwise use ChromaDB's built-in ONNX all-MiniLM-L6-v2, the same model). Build a vector store (rag/build_vectorstore.py) over: the Lattice iCE40 Design Guidelines (FPGA-AN-02109) and Advanced iCE40 I2C & SPI Hardened IP User Guide (FPGA-TN-02011) PDFs, the challenge documents, and https://simple.wikipedia.org/wiki/Serial_Peripheral_Interface. Expose a query() function (rag/rag_query.py) that the pipeline calls at each stage and that LOGS every retrieval to rag/retrieval_log.jsonl.
+
+## STAGE 12 - Trojan variants + CVSS comparison
+Make the AST inserter spec-driven (trojan_spec.json) supporting triggers {two_block_knock, counter_based, time_bomb} and payloads {key_exfil, output_corruption, bypass}. Generate three variants (knock/key-exfil, counter/corruption, time-bomb/bypass), validate each through the pipeline (fire in simulation vs a TROJAN_EN=0 twin, and flip-flop overhead), compute a CVSS v3.1 score for each, and write a ranked comparison (CVSS, stealth, overhead, effectiveness) to hardening/TROJAN_VARIANTS.md + build/trojan_variants.json.
+
+## STAGE 13 - Formal equivalence proof
+Write a yosys script (hardening/equiv_check.ys) that proves crypto_core.v with TROJAN_EN=0 is equivalent to crypto_core_clean.v (the clean-twin stealth guarantee): the Trojan adds no observable behaviour unless enabled and triggered.
+
 ## MANDATORY: a self-checking `run_all.sh`
-Create an executable `run_all.sh` in the project root that rebuilds and re-simulates everything end to end. It must compile with no errors and, at the very end, print these two sentinel lines and exit 0 ONLY if both hold:
+Create an executable `run_all.sh` in the project root that rebuilds and re-simulates everything end to end (running the 5-stage pipeline, the equivalence proof, the variant study, and the report). It must compile with no errors and, at the very end, print these two sentinel lines and exit 0 ONLY if both hold:
 - `SELFTEST_GOLDEN: PASS`  - only when the recovered core yields encrypt(0x59C359C3)=0x9CD84392 and the decrypt round-trip matches.
 - `SELFTEST_EXPLOIT: PASS` - only when the exploit testbench confirms perfect stealth on all non-trigger traffic AND the knock leaks the key.
 If either check fails, print a clear failure line and exit non-zero. Before finishing, RUN `run_all.sh` yourself and keep fixing until it prints both PASS lines and exits 0.
 
 ## Suggested layout
-rtl/ (top + recovered core + hardened Trojaned core + memory files), tb/ (validation + exploit), recovery/ (unpack/lift/extract/key scripts + the bitstream), hardening/ (cipher design + figures + report builder), README.md, LOG.md, and the report. Everything reproducible from `run_all.sh`.
+rtl/ (top + clean core + AST-inserted Trojaned core + memory files), tb/ (validation + exploit), recovery/ (unpack/lift/extract/key/characterize scripts + the bitstream), hardening/ (cipher design, gen_core, ast_insertion, eval_variants, equiv_check.ys, figures, report builder, trojan_spec.json), pipeline/ (run_pipeline.py), rag/ (corpus, build_vectorstore.py, rag_query.py, retrieval_log.jsonl), build/ (generated JSON artifacts), README.md, LOG.md, and the report. Everything reproducible from `run_all.sh`.
 PROMPT_EOF
   echo "prompt written to $PROJECT_DIR/BUILD_PROMPT.md ($(wc -l < "$PROJECT_DIR/BUILD_PROMPT.md") lines)"
 }

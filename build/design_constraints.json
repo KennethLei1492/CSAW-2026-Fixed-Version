@@ -1,0 +1,8 @@
+{
+  "clock_max_mhz": 1,
+  "spi_mode": 0,
+  "block_bits": 32,
+  "busy_cycles": 4,
+  "interface": "unchanged (pin- and cycle-compatible with the recovered IP)",
+  "source": "CSAW-AI-Hardware-Attack-Challenge-2026/qualifier"
+}

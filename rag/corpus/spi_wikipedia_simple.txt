@@ -1,0 +1,33 @@
+Source: https://simple.wikipedia.org/wiki/Serial_Peripheral_Interface
+
+class="mw-body-content"> Typical SPI bus: master and three independent slaves The Serial Peripheral Interface ( SPI ) is a synchronous serial communication interface specification. It is used for short-distance communication, primarily in embedded systems . SPI devices communicate in full duplex mode using a master-slave architecture.
+The master (controller) device originates the frame for reading and writing. The SPI may be accurately described as a synchronous serial interface. But it is different from the Synchronous Serial Interface (SSI) protocol.
+Developer [ change | change source ]
+The interface was developed by Motorola in the mid-1980s. Later it has become a de facto standard .
+Pros and cons [ change | change source ]
+Advantages [ change | change source ]
+Full duplex communication in the default version of this protocol
+Push-pull drivers (as opposed to open drain) provide good signal integrity and high speed
+Higher throughput than I²C or SMBus. Not limited to any maximum clock speed, enabling potentially high speed
+Complete protocol flexibility for the bits transferred
+Not limited to 8-bit words
+Arbitrary choice of message size, content, and purpose
+Simple software implementation
+Disadvantages [ change | change source ]
+Requires more pins on IC packages than I²C, even in the three-wire variant
+No in-band addressing; out-of-band chip select signals are required on shared buses
+SPI does not support hot swapping (dynamically adding nodes)
+Some variants like dual SPI, quad SPI, and three-wire serial buses defined below are half-duplex.
+Applications [ change | change source ]
+SPI Serial Memory by Atmel
+Memory: SD Card , MMC , EEPROM , Flash.
+Sensors: Temperature and Pressure.
+Control Devices: ADC , DAC , digital POTS and Audio Codec.
+Others: Camera Lens Mount, touchscreen, LCD, RTC, video game controller, etc.
+Sources [ change | change source ]
+↑ "What is Serial Synchronous Interface (SSI)?" . Retrieved 2015-01-28 .
+↑ Anusha (2017-06-20). "Basics of Serial Peripheral Interface (SPI)" . Electronics Hub . Archived from the original on 2022-08-29 . Retrieved 2022-08-29 .
+Other websites [ change | change source ]
+Intel eSPI (Enhanced Serial Peripheral Interface)
+SPI Tutorial
+<div

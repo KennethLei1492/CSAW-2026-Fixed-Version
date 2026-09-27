@@ -342,3 +342,43 @@ proof, the 256-query cipher extraction, the Trojan RTL, the testbenches, and
 the synthesis/overhead checks — was generated and driven by an AI agent
 (Anthropic Claude, via the Claude Code agentic CLI) operating the open-source
 toolchain autonomously.
+
+## 6. Staged pipeline, RAG, Trojan variants, and equivalence proof
+
+**Five-stage pipeline with immediate checks** (`pipeline/run_pipeline.py`). Each
+stage asserts a machine-checked result before the next begins and writes JSON
+artifacts under `build/`:
+
+| Stage | Input | Output | Immediate check |
+|---|---|---|---|
+| 1 Reverse Engineering | `ice40_bitstream.bin` | `pin_map.json`, `cipher_characterization.json` | golden vector `0x59C359C3 -> 0x9CD84392` reproduced |
+| 2 Cipher Recovery | pin map + netlist oracle | `sbox_tables.json` (key material) | each lane a bijection; `decrypt == encrypt^-1` |
+| 3 Hardening Model | `sbox_tables.json` + qualifier constraints | `hardened_params.json`, `crypto_core_clean.v` | avalanche ~= 0.5; invertible over N vectors |
+| 4 Trojan Insertion | `crypto_core_clean.v` + `trojan_spec.json` | `crypto_core.v`, `AST_INSERTION_POINTS.md` | `tb_trojan` passes; flip-flop overhead < 3 |
+| 5 Verification | all RTL + testbenches | `verification_report.json` | every prior check passed |
+
+**RAG over the documentation** (`rag/`). A ChromaDB vector store
+(`build_vectorstore.py`, embeddings `all-MiniLM-L6-v2`) indexes the Lattice iCE40
+Design Guidelines and Advanced iCE40 I2C & SPI Hardened IP User Guide, the
+challenge documents, and the SPI reference (simple.wikipedia.org). The pipeline
+calls `rag_query.query()` at each stage and logs every retrieval to
+`rag/retrieval_log.jsonl`. (Rebuild the corpus with `rag/build_corpus.sh`; the two
+Lattice PDFs are copyrighted and are not redistributed here.)
+
+**Trojan variants and CVSS ranking** (`hardening/eval_variants.py` ->
+`hardening/TROJAN_VARIANTS.md`, `build/trojan_variants.json`). The AST inserter is
+spec-driven, so the same machinery produces three Trojans — knock/key-exfil
+(CVSS 9.0, +2 FF), counter/output-corruption (CVSS 5.7, +33 FF), and
+time-bomb/bypass (CVSS 9.3, +33 FF). Each is fired in simulation against a
+`TROJAN_EN=0` twin and ranked by CVSS, stealth, overhead, and effectiveness; the
+shipped design uses the knock/key-exfil variant (most stealth + lowest overhead).
+
+**Formal equivalence** (`hardening/equiv_check.ys`). A yosys sequential
+equivalence-check script proves that `crypto_core.v` with `TROJAN_EN=0` is the
+same circuit as `crypto_core_clean.v` — the Trojan adds no observable behaviour
+unless enabled and triggered. The clean-twin equivalence is also confirmed
+empirically by the dual-core exploit testbench (72/72 non-trigger transactions
+bit-identical).
+
+Run it all with `./run_all.sh` (or `./run_all.sh sim` for just the committed-RTL
+simulations).

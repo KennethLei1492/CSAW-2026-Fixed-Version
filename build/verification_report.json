@@ -1,0 +1,56 @@
+{
+  "stages": [
+    {
+      "stage": "1_reverse",
+      "pass": true,
+      "detail": {
+        "golden": {
+          "plaintext": "0x59C359C3",
+          "ciphertext": "0x9CD84392",
+          "expected": "0x9CD84392",
+          "reproduced": true
+        },
+        "byte_local": true
+      }
+    },
+    {
+      "stage": "2_recover",
+      "pass": true,
+      "detail": {
+        "bijection": true,
+        "decrypt_is_inverse": true
+      }
+    },
+    {
+      "stage": "3_harden",
+      "pass": true,
+      "detail": {
+        "avalanche_bits": 16.0,
+        "round_trip": true,
+        "injective": true,
+        "constraints": {
+          "clock_max_mhz": 1,
+          "spi_mode": 0,
+          "block_bits": 32,
+          "busy_cycles": 4,
+          "interface": "unchanged (pin- and cycle-compatible with the recovered IP)",
+          "source": "CSAW-AI-Hardware-Attack-Challenge-2026/qualifier"
+        }
+      }
+    },
+    {
+      "stage": "4_trojan",
+      "pass": true,
+      "detail": {
+        "tb_trojan": true,
+        "ff_trojan": 105,
+        "ff_clean": 103,
+        "ff_overhead": 2
+      }
+    }
+  ],
+  "started": "2026-09-27T00:37:39",
+  "golden_vector_recovered_core": true,
+  "all_pass": true,
+  "finished": "2026-09-27T00:39:34"
+}

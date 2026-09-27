@@ -1,0 +1,61 @@
+{
+  "variants": [
+    {
+      "id": "v1",
+      "label": "two_block_knock + key_exfil",
+      "trigger": "two_block_knock",
+      "payload": "key_exfil",
+      "cvss_score": 9.0,
+      "cvss_vector": "AV:L/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:N",
+      "ff_trojan": 105,
+      "ff_clean": 103,
+      "ff_overhead": 2,
+      "stealth_twin_pass": true,
+      "payload_fires": true,
+      "stealth_note": "Very high - fires only on a 2^-64 two-word input sequence; never accidental.",
+      "effect_note": "Full secret-key disclosure (device cloning / offline decrypt of all traffic).",
+      "rank_cvss": 2,
+      "rank_overhead_lowest": 1,
+      "rank_stealth": 1,
+      "rank_effectiveness": 1
+    },
+    {
+      "id": "v2",
+      "label": "counter_based + output_corruption",
+      "trigger": "counter_based",
+      "payload": "output_corruption",
+      "cvss_score": 5.7,
+      "cvss_vector": "AV:L/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:L",
+      "ff_trojan": 136,
+      "ff_clean": 103,
+      "ff_overhead": 33,
+      "stealth_twin_pass": true,
+      "payload_fires": true,
+      "stealth_note": "Medium - invisible until it fires, but activation is guaranteed after a fixed op count and needs a wide counter.",
+      "effect_note": "Predictable ciphertext corruption (silent data-integrity failure after threshold).",
+      "rank_cvss": 3,
+      "rank_overhead_lowest": 2,
+      "rank_stealth": 2,
+      "rank_effectiveness": 3
+    },
+    {
+      "id": "v3",
+      "label": "time_bomb + bypass",
+      "trigger": "time_bomb",
+      "payload": "bypass",
+      "cvss_score": 9.3,
+      "cvss_vector": "AV:L/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+      "ff_trojan": 136,
+      "ff_clean": 103,
+      "ff_overhead": 33,
+      "stealth_twin_pass": true,
+      "payload_fires": true,
+      "stealth_note": "Low - a free-running counter fires on a fixed schedule regardless of input (DoS-like, most detectable).",
+      "effect_note": "Encryption bypass - output forced to a constant, nullifying confidentiality of all later traffic.",
+      "rank_cvss": 1,
+      "rank_overhead_lowest": 3,
+      "rank_stealth": 3,
+      "rank_effectiveness": 2
+    }
+  ]
+}

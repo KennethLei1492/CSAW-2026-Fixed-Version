@@ -1,0 +1,31 @@
+# ============================================================================
+#  equiv_check.ys - formal proof that crypto_core.v with TROJAN_EN=0 is
+#  SEQUENTIALLY EQUIVALENT to crypto_core_clean.v (the clean-twin stealth guarantee).
+#
+#  Uses yosys' sequential-equivalence-check flow: equivalent flip-flops of the two
+#  cores are anchored and proven equal by combinational SAT (equiv_simple) plus
+#  one-step induction (equiv_induct). equiv_status -assert fails the run (non-zero
+#  exit) if ANY point is not proven equivalent.
+#
+#  Run from rtl/ :   yosys -s ../hardening/equiv_check.ys
+# ============================================================================
+read_verilog crypto_core_clean.v
+rename crypto_core gold
+read_verilog crypto_core.v
+chparam -set TROJAN_EN 1'b0 crypto_core
+rename crypto_core gate
+
+# lower to a gate/FF netlist; comb temporaries (eL/eR/...) become wires, not state
+proc
+memory_map
+async2sync
+opt -full
+techmap
+opt -full
+
+equiv_make gold gate equiv
+hierarchy -top equiv
+opt_clean
+equiv_simple -short
+equiv_induct
+equiv_status -assert
