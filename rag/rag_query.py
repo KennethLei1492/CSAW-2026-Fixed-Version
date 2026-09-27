@@ -40,8 +40,9 @@ def _log(entry):
     with open(LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
-def query(question, k=4, stage=None):
-    """Return [{source, chunk, distance, text}], logging the retrieval."""
+def query(question, k=4, stage=None, decision=None):
+    """Return [{source, chunk, distance, text}], logging the retrieval AND the
+    decision it drove (how the retrieved evidence + distances shaped the design)."""
     try:
         coll = _get_collection()
         res = coll.query(query_texts=[question], n_results=k)
@@ -54,10 +55,12 @@ def query(question, k=4, stage=None):
                 "text": res["documents"][0][i],
             })
         _log({"stage": stage, "query": question, "k": k,
-              "retrieved": [{"source": h["source"], "chunk": h["chunk"], "distance": h["distance"]} for h in hits]})
+              "retrieved": [{"source": h["source"], "chunk": h["chunk"], "distance": h["distance"]} for h in hits],
+              "decision": decision})
         return hits
     except Exception as e:
-        _log({"stage": stage, "query": question, "k": k, "error": str(e), "retrieved": []})
+        _log({"stage": stage, "query": question, "k": k, "error": str(e),
+              "retrieved": [], "decision": decision})
         return []
 
 if __name__ == "__main__":

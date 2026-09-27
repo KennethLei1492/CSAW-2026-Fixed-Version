@@ -37,7 +37,8 @@ if [ "${1:-}" = "sim" ]; then
   echo "#### quick sim (committed RTL) ####"
   run_sims
 else
-  echo "#### RAG: build the documentation vector store (best-effort) ####"
+  echo "#### RAG: assemble corpus + build the documentation vector store (best-effort) ####"
+  bash rag/build_corpus.sh >/dev/null 2>&1 || echo "(corpus fetch partial)"
   "$PY" rag/build_vectorstore.py 2>/dev/null | tail -1 || echo "(RAG store optional; skipped)"
 
   echo "#### Staged pipeline (5 stages, immediate checks, RAG at each stage) ####"

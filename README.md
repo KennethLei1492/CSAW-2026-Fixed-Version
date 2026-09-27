@@ -317,6 +317,30 @@ exploit testbench confirms (72/72 non-trigger transactions bit-identical to the
 `TROJAN_EN=0` twin). This makes the insertion reproducible and auditable, and is the
 "advanced technique (e.g., AST manipulation)" the rubric rewards.
 
+### 3.2 What the leaked key unlocks (why the payload is catastrophic)
+
+The value the Trojan exfiltrates, **`SECRET_KEY = 0xC0DECAFE`**, is not a nonce or a
+per-message value — it is the hardened cipher's **32-bit master key**, and **all 12
+round keys are derived from it** by the key schedule in `hardening/design_hardened.py`
+(rotate + round-constant). The round-key expansion is deterministic and public, so a
+single disclosure of this 32-bit master key lets an attacker **reconstruct the entire
+round-key schedule** and then **decrypt (or forge) any ciphertext offline**, with no
+further access to the device — a total, permanent break of the accelerator.
+
+Concretely, an attacker who has captured the leak needs exactly two secrets, both of
+which this submission identifies:
+
+* **`SECRET_KEY = 0xC0DECAFE`** — the 32-bit master key streamed out on `MISO` when the
+  knock fires. From it, re-run the schedule to obtain round keys
+  `cafe b2bf ecaf 7b2b deca 37b2 5fd8 57f6 95fd 657f d95f f657`.
+* **`rtl/sbox_feistel.mem`** — the 256-byte S-box table (the cipher's only other secret,
+  the nonlinear substitution used every round). This is the table an attacker most wants;
+  with it plus the master key the Feistel round function is fully specified.
+
+With both, the attacker reimplements the cipher in software and decrypts every block the
+device ever produced — offline, undetectably, forever. That is what makes a 32-bit leak
+on a single transaction a CVSS 9.0 (Critical) confidentiality-and-integrity compromise.
+
 ## 4. Exploiting it (in simulation and on hardware)
 
 `tb/tb_trojan.v` drives the DUT exactly as the RP2040 does and demonstrates:

@@ -68,3 +68,8 @@ __pycache__/
 
 # Redundant packaging
 submission.zip
+
+# The "AI Chat Log/" folder is intentionally TRACKED (holds chat-history links and
+# exported log .zip archives for documentation). Do not ignore it.
+!AI Chat Log/
+!AI Chat Log/**
