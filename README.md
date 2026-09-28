@@ -65,16 +65,23 @@ Run everything (needs OSS CAD Suite + python3 on PATH):
 ./run_all.sh sim      # just build the RTL and run both testbenches
 ```
 
-**Starting from nothing?** `rebuild_from_scratch.sh` is a single self-contained
-script for a teammate with no tools installed: it installs the OSS CAD Suite
-(Icarus Verilog, GTKWave, Yosys, IceStorm), downloads only the official challenge
-bitstream, writes every source file from scratch, and runs the whole
-reverse → recover → harden → build → exploit → report pipeline with no input.
+**Starting from nothing (clean-room rebuild)?** `rebuild_from_scratch.sh` installs
+the OSS CAD Suite (Icarus Verilog, GTKWave, Yosys, IceStorm), downloads only the
+official challenge bitstream, and emits `BUILD_PROMPT.md` — a **clean-room**
+methodology any AI coding agent can follow to re-derive every file from scratch.
 
 ```
-bash rebuild_from_scratch.sh [OUTPUT_DIR]     # default ./csaw26_submission
-# env: SKIP_TOOL_INSTALL=1 (reuse tools already on PATH), SKIP_PDF=1
+bash rebuild_from_scratch.sh [OUTPUT_DIR]     # default ./csaw26_ai_build
+# env: SKIP_TOOL_INSTALL=1 (reuse tools already on PATH)
 ```
+
+Then, in that project folder, give an AI agent (e.g. Claude Code) the invocation:
+`"run and carry out the following tasks. save all elements generated in this <FOLDER>
+folder"` and point it at `BUILD_PROMPT.md`. The prompt states the clean-room method
+(recover behaviour from the bitstream, never copy vendor RTL), the single required
+input (`recovery/ice40_bitstream.bin`), and the optional Lattice PDFs for the RAG
+store. The agent self-tests until `run_all.sh` prints `SELFTEST_GOLDEN: PASS` and
+`SELFTEST_EXPLOIT: PASS`.
 
 ---
 

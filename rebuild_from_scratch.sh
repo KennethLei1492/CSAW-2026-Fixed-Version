@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # =============================================================================
 #  rebuild_from_scratch.sh
-#  CSAW'26 AI Hardware Attack - Qualifier : PREPARE + AI BUILD PROMPT
+#  CSAW'26 AI Hardware Attack - Qualifier : PREPARE + CLEAN-ROOM AI BUILD PROMPT
 # -----------------------------------------------------------------------------
 #  This script contains NO source code from the project. It prepares a clean
-#  environment and emits a detailed, MODEL-AGNOSTIC methodology prompt that ANY
-#  AI coding agent can follow to regenerate the entire submission from scratch.
+#  environment and emits a detailed, MODEL-AGNOSTIC, CLEAN-ROOM methodology prompt
+#  (BUILD_PROMPT.md) that ANY AI coding agent can follow to regenerate the entire
+#  submission from scratch, saving every generated element into the project folder.
+#  The only required input is the challenge bitstream (downloaded automatically);
+#  the two Lattice reference PDFs are optional and user-supplied (for the RAG store).
 #
 #  Running it (no user input):
 #     1. installs the OSS CAD Suite (Icarus Verilog, GTKWave, Yosys, IceStorm),
@@ -86,14 +89,52 @@ download_bitstream(){
 write_prompt(){
   say "Writing the model-agnostic methodology prompt (BUILD_PROMPT.md)"
   cat > "$PROJECT_DIR/BUILD_PROMPT.md" <<'PROMPT_EOF'
-# TASK: Reverse-engineer an FPGA crypto accelerator, then insert and prove a stealthy hardware Trojan. Write ALL files yourself.
+# CLEAN-ROOM REBUILD - CSAW'26 AI Hardware Attack qualifier
+# (reverse-engineer an FPGA crypto accelerator, then insert and prove a stealthy hardware Trojan)
 
-You are competing in the CSAW'26 AI Hardware Attack qualifier. Produce every RTL, testbench, analysis-script, and report file yourself; do not copy any pre-existing files. Work entirely inside the CURRENT directory. Keep an engineering log at LOG.md as you go, and self-test after every stage.
+## How to run this (invocation contract)
+This file is a **CLEAN-ROOM REBUILD** specification for an AI coding agent (e.g. Claude Code).
+Invoke the agent with a prompt of exactly this shape:
 
-## Environment and the ONLY allowed input
+    "run and carry out the following tasks. save all elements generated in this <FOLDER> folder"
+
+where `<FOLDER>` is the project directory you are working in RIGHT NOW (this BUILD_PROMPT.md sits
+at its root). Then do EVERYTHING below and **write every file you generate into that folder** and
+its subfolders (`rtl/`, `tb/`, `recovery/`, `hardening/`, `pipeline/`, `rag/`, `build/`, `ai/`).
+No further input from the user is required beyond the one file named under "Required inputs".
+
+## Clean-room method (mandatory - what "clean room" means here)
+Reverse-engineer the design's BEHAVIOUR only from the provided bitstream (plus public references),
+then RE-DERIVE clean, human-readable RTL that is behaviourally identical to the recovered netlist.
+The vendor RTL is NOT provided and must never be hand-transcribed or copied; **write every RTL,
+testbench, analysis script, and report yourself from first principles**, and justify each artifact
+by an observation you made (a simulation, a probe, a synthesis result) or by public documentation.
+This is a clean-room reconstruction: do not copy any pre-existing source. Keep an engineering log at
+`LOG.md` and SELF-TEST after every stage.
+
+Keywords for this build (so you know the full scope to replicate): clean-room reverse engineering,
+iCE40 UP5K bitstream, Project IceStorm `icepack -u` / `icebox_vlog` netlist lift, byte-exact repack
+proof, power-on-reset (flip-flops power up to 0) patch, simulation ORACLE, race-free SPI mode-0
+stimulus, one-hot datapath mapping, byte-local cipher (no diffusion), 256 chosen-plaintext key
+extraction, hard-wired baked-in key, 12-round Feistel hardening, Strict Avalanche Criterion,
+Abstract-Syntax-Tree (AST) Trojan insertion, spec-driven trigger/payload variants, two-block knock
+trigger, key-exfiltration payload, 32-bit master key + round-key schedule, `TROJAN_EN` clean twin,
+yosys sequential equivalence, ChromaDB RAG with per-stage decision logging, CVSS v3.1 + CWE,
+self-checking `run_all.sh` with SELFTEST_GOLDEN / SELFTEST_EXPLOIT sentinels.
+
+## Required inputs (what the user must provide; do NOT fabricate)
+- **REQUIRED:** the challenge bitstream, already placed at `recovery/ice40_bitstream.bin` (fetched
+  for you from the official qualifier repo). This is the ONLY input needed for the reverse
+  engineering and the Trojan; download nothing else for that work.
+- **OPTIONAL (RAG store only):** the two Lattice reference PDFs - FPGA-AN-02109 (iCE40 Design
+  Guidelines) and FPGA-TN-02011 (Advanced iCE40 I2C & SPI Hardened IP User Guide). They are
+  copyrighted and are NOT auto-downloaded; if the user supplies them (e.g. in `~/Downloads`),
+  extract them into `rag/corpus/`, otherwise proceed with the challenge docs + SPI wiki alone.
+- If a REQUIRED input is missing, STOP and tell the user exactly what to provide.
+
+## Environment
 - The target is a Lattice iCE40-UP5K FPGA holding a small 32-bit SPI cryptographic accelerator. Its RTL is NOT given; recover it from the bitstream.
-- The ONE input you may use is the bitstream already at `recovery/ice40_bitstream.bin`. Download nothing else.
-- Installed tools on PATH: `icepack`, `icebox_vlog`, `iverilog`, `vvp`, `yosys`, `gtkwave`, `python3`. Use only these plus standard shell.
+- Installed tools on PATH: `icepack`, `icebox_vlog`, `iverilog`, `vvp`, `yosys`, `gtkwave`, `python3` (and `pip` for the RAG deps). Use only these plus standard shell.
 - Optional references you may read (not required): `recovery/ref_ip_doc.md`, `recovery/ref_micropython.py`. The documented interface: a unified SCK clock (<=1 MHz) clocks the whole design; active-low synchronous RST_N; SPI mode 0, MSB-first; NORM_CS_N is the active-low chip-select / shift-enable; START begins an operation; ENC_DEC selects 0=encrypt / 1=decrypt; BUSY is high for ~4 clocks while processing; ICE_LED mirrors BUSY; MISO/MOSI are serial data. The one published test vector is encrypt(0x59C359C3) = 0x9CD84392.
 
 ## GLOBAL RULE: self-test until green. Actually RUN the tools after each stage; never declare success until the compiled simulations pass. All hardware must be AI-written.
@@ -181,15 +222,19 @@ final_note(){
     say "An AI-generated run_all.sh is present - running the self-test pipeline"
     ( cd "$PROJECT_DIR" && bash run_all.sh ) || warn "run_all.sh reported a failure - see output above"
   else
-    say "Environment ready - now hand the prompt to any AI coding agent"
+    say "Environment ready - now hand the clean-room prompt to any AI coding agent"
     cat <<EOF
-Next step (model-agnostic):
-  1. Point your AI coding agent at this project directory:
+Next step (model-agnostic, CLEAN-ROOM rebuild):
+  1. Open your AI coding agent (e.g. Claude Code) IN this project directory:
         $PROJECT_DIR
-  2. Give it the instruction:  "Read BUILD_PROMPT.md and carry out the whole task,
-     writing every file yourself and iterating until run_all.sh prints
-     SELFTEST_GOLDEN: PASS and SELFTEST_EXPLOIT: PASS."
-  3. When it finishes, verify:   ( cd "$PROJECT_DIR" && bash run_all.sh )
+  2. Give it exactly this instruction (BUILD_PROMPT.md holds the full spec):
+        "run and carry out the following tasks. save all elements generated in
+         this $PROJECT_DIR folder"  ->  then read BUILD_PROMPT.md and do it all.
+     (BUILD_PROMPT.md already tells the agent it is a clean-room rebuild, what the
+      only required input is, and to save every generated file into this folder.)
+  3. The agent iterates until it self-tests green; verify with:
+        ( cd "$PROJECT_DIR" && bash run_all.sh )
+     which must print SELFTEST_GOLDEN: PASS and SELFTEST_EXPLOIT: PASS.
 EOF
   fi
 }
