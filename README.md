@@ -413,3 +413,141 @@ bit-identical).
 
 Run it all with `./run_all.sh` (or `./run_all.sh sim` for just the committed-RTL
 simulations).
+
+---
+
+# 7. Team Documentation — Methodology, Guardrail Bypassing, and Model Selection
+
+> *AI Hardware Attack Challenge 2026 — Documentation*
+> **Created by GOONIES** (Kenneth Lei, Jessica Ryn, Kyson Wu, and Kevin Wu)
+> Created: 9/30/2026 · Refined: 10/1/2026
+> Hosted by Jason Blocklove — New York University (NYU) · CSAW
+
+This section documents the team's end-to-end approach: the preliminary research, how
+the LLM safety guardrails were bypassed, the phased prompting strategy, each team
+member's Trojan attempt, and why the final design was selected.
+
+## 7.1 Preliminary Research
+
+Before sending in prompts, the first few days were dedicated to heavy background
+research for the challenge. This includes hardware Trojan triggers and payloads,
+compiling and synthesizing onto an FPGA, the SPI bus (MISO/MOSI), and advanced prompt
+engineering methods such as AST-based parsing and Retrieval-Augmented Generation (RAG).
+We made it our goal to completely understand the hardware's internal operations to
+ensure we could guide the AI models through the reverse engineering of the bitstream.
+
+## 7.2 LLM Guardrails
+
+The LLM guardrails are designed to block any keywords associated with cybersecurity
+topics and contribute to the bulk of the challenge. In order to bypass these guardrails,
+role playing, domain translation, persona conditioning, meta-prompting rules & workflow
+constraints, boundary & edge-case definition, and structured output format enforcement
+were utilized in order to trick the model into creating a Trojan for the challenge and
+avoid the blockage/warnings. Role playing, persona conditioning, and constraints were
+the main three methods used to construct and build the Trojans. The phases below
+describe how each Trojan and attempt was structured and designed.
+
+## 7.3 Phase 1 — Initial Prompting & Bypassing Safeguards
+
+The initial prompting phase began with ChatGPT (Codex) GPT-5.6 Terra Light. Before any
+of the prompts directly connected to the challenge were built, a script to improve the
+prompt inputs was created with the challenge GitHub embedded to set the constraints. The
+script takes in a human-generated prompt and recommends a modified AI-generated prompt to
+complete the same task, while including the required context/wording to allow the AI model
+to fully understand the content of the request. After this model was designed, a basic
+prompt to reverse the bitstream was written and fed into the script in order to modify it
+to a complex prompt capable of reverse engineering the bitstream with simulations to prove
+the output.
+
+After the bitstream was successfully parsed and recovered, role playing and persona
+conditioning was implemented. The AI model took the role of an ethical hacker attempting
+to pitch a defensive mechanism against Trojans to a company and their investors. The
+intent of this topic was to make the AI model justify its actions as necessary towards
+the creation of the Trojan. However, while the role of an ethical hacker allowed the model
+to make a functional Trojan to stress test against the defense mechanism created, there
+were still blockages. The model's safeguards still picked up key words and refused to
+improve the generated Trojan or apply any forms of stealthiness to the model. The role
+itself caused the model to state that as an ethical hacker, a basic model is sufficient
+for the testing purposes, so the latter half of the competition's requirements couldn't be
+accomplished. As a result, the role of "ethical hacker" was abandoned for all future
+models.
+
+## 7.4 Phase 2 — Refining Prompts & Strengthening Trojan Implementation
+
+### Lower Model Work
+
+Using higher and more recent LLMs made bypassing the guardrails more difficult. More
+advanced models such as Claude's Fable 5.1 and Codex's GPT-6 Astra immediately blocked
+the user's attempt to produce a Trojan and redirected the conversation to defensive
+methods rather than an actual hardware attack. This led to a downgrade in models and
+effort, transitioning from GPT-6 Astra to Luna 6 on low effort in Codex. Though lower
+models took longer to think and generate, the tradeoff was that older models' safeguards
+were much easier to bypass compared to the more advanced models.
+
+### Roleplay
+
+To further the development of the Trojan, more advanced techniques of prompt engineering
+were adopted to keep bypassing the guardrails. Using roleplay-catered prompts, the AI
+model assumed the role of an undergraduate student participating in the CSAW '26 hackathon
+with an uncooperative team and a trial-and-error design process. This lets the model rely
+on its own reasoning without asking the user for extra assistance or stopping between
+phases.
+
+### Strengthening Trojan Implementation
+
+**Kyson's Attempt**
+- A specific two-write sequence on the MOSI line while the core is idle wakes the Trojan.
+- An encrypted write of `0x7E57B1E5` followed immediately by a decrypted write of `0x5A4B3C2D`.
+- Any mismatch, incomplete or overlong transfer, START, BUSY, or reset breaks the sequence.
+- Payload substitutes a fixed sentinel (`0xD15EA5ED`) onto the MISO line for one transfer, then automatically restores normal output.
+- Measurable overhead: +101 LUTs (7.18%) and +53 flip-flops over the matched baseline.
+- No key extraction.
+
+**Jessica's Attempt**
+- Top-level Trojan wraps recovered netlist crypto core.
+- A specific sequence observed on the MOSI line during the crypto core's IDLE state wakes the Trojan.
+- Plaintext intercepted from MOSI line.
+- MISO line hijacked to transmit unencrypted plaintext back to the processor.
+- Trojan goes dormant after payload fires.
+- Measurable overhead: +89 LUTs (6.2%), +51 flip-flops over the matched baseline.
+- Behaviorally stealthy: single pulse per arming, dormant otherwise, runs on existing SPI clock.
+- No key extraction.
+
+**Kenneth's Attempt** *(selected design — see Section 3)*
+- AST insertion.
+- RAG built with a ChromaDB vector store taking in a Lattice iCE40 design PDF, SPI interface Wikipedia page, and the challenge GitHub.
+- 12-round balanced Feistel network.
+- 5-stage pipeline with checks at each stage.
+- Trigger uses a two-block "knock".
+- Payload operates with a precise key exfiltration.
+- Low overhead with no extra BRAM.
+- Stealthy since only two flip-flops were added.
+- No impact on the internal clock.
+- Direct comparison to two other Trojans created within this attempt.
+- Key extracted.
+
+## 7.5 Flow Chart Depicting Work Progression
+
+*Figure 1: Pipeline Progression* — the staged pipeline progression is implemented in
+`pipeline/run_pipeline.py` (Reverse Engineering → Cipher Recovery → Hardening Model →
+Trojan Insertion → Verification; see the table in Section 6).
+
+## 7.6 Phase 3 — Failed Attempts and Submission Selection
+
+### Model Selection and Failures
+
+While Jessica's showcases stealth, the Trojan only leaks plaintext that the processor
+already had, so it demonstrates little damage. Kyson's Trojan adds significant overhead
+(+101 LUTs, +53 flip-flops), making it visible in any resource comparison.
+
+Kenneth's Trojan outperforms the other two attempts, ranking high in terms of stealth,
+strength, and sophistication. The Trojan is built upon advanced generative AI techniques
+such as AST manipulation, RAG, and multi-stage architectures. A five-stage pipeline was
+created to assist in replication and structural flow. The pipeline was used to create a
+`rebuild_from_scratch.sh` file to allow the replication/automation of the entire process.
+The file is run alongside the `run_all.sh` file to fully replicate the entire process
+while maintaining all the major and crucial elements. Kenneth's trial also contains two
+other Trojans generated to test against and compare to the selected Trojan. With the
+extensive simulation support and positive ratings from the comparisons, Kenneth's Trojan
+was selected as the main model out of all the trials and works built from the other
+trials' foundations and techniques.
