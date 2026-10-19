@@ -19,15 +19,17 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
 PY="$(command -v python3 || command -v python)"; [ -n "$PY" ] || { echo "python not found"; exit 2; }
 mkdir -p build
-GOLDEN=FAIL; EXPLOIT=FAIL
+GOLDEN=FAIL; EXPLOIT=FAIL; KEYCHK=SKIP; NETEQUIV=SKIP
 
 run_sims(){
   ( cd rtl
     iverilog -g2012 -o ../build/_v.vvp ../tb/tb_validate.v spi_crypto_top.v crypto_core_recovered.v
     vvp ../build/_v.vvp ) | tee build/_v.out
   grep -q 'VALIDATE: ALL PASS' build/_v.out && GOLDEN=PASS
+  # Exploit sim runs against the RECOVERED cipher (the real device behaviour),
+  # leaking the recovered device key 0x8E043CB1 - not a recreated stand-in.
   ( cd rtl
-    iverilog -g2012 -o ../build/_t.vvp ../tb/tb_trojan.v spi_crypto_top.v crypto_core.v
+    iverilog -g2012 -o ../build/_t.vvp ../tb/tb_trojan.v spi_crypto_top.v crypto_core_recovered.v
     vvp ../build/_t.vvp | grep -vE 'VCD|dumpfile' ) | tee build/_t.out
   grep -q 'TB_TROJAN: ALL PASS' build/_t.out && EXPLOIT=PASS
   rm -f build/_v.vvp build/_t.vvp build/_v.out build/_t.out rtl/*.vcd 2>/dev/null || true
@@ -43,6 +45,11 @@ else
 
   echo "#### Staged pipeline (5 stages, immediate checks, RAG at each stage) ####"
   "$PY" pipeline/run_pipeline.py || echo "(pipeline reported a failure; see build/verification_report.json)"
+
+  echo "#### Reverse-engineering verification (against the gate-level netlist) ####"
+  ( cd recovery && bash reverse.sh >/dev/null 2>&1 || true )
+  if "$PY" recovery/recover_key.py; then KEYCHK=PASS; else KEYCHK=FAIL; fi
+  if "$PY" recovery/equiv_netlist.py; then NETEQUIV=PASS; else NETEQUIV=FAIL; fi
 
   echo "#### Formal proof: crypto_core.v (TROJAN_EN=0) == crypto_core_clean.v ####"
   ( cd rtl && timeout 120 yosys -s ../hardening/equiv_check.ys > ../build/equiv.log 2>&1 ) \
@@ -71,7 +78,10 @@ else
 fi
 
 echo
-echo "SELFTEST_GOLDEN:  $GOLDEN"
-echo "SELFTEST_EXPLOIT: $EXPLOIT"
-if [ "$GOLDEN" = PASS ] && [ "$EXPLOIT" = PASS ]; then echo "ALL SELF-TESTS PASSED"; exit 0
+echo "SELFTEST_GOLDEN:   $GOLDEN"
+echo "SELFTEST_EXPLOIT:  $EXPLOIT"
+echo "KEY_RECOVERY:      $KEYCHK     (recovered device key 0x8E043CB1 == leaked key)"
+echo "NETLIST_EQUIV:     $NETEQUIV     (recovered RTL bit-exact to gate-level netlist)"
+if [ "$GOLDEN" = PASS ] && [ "$EXPLOIT" = PASS ] \
+   && [ "$KEYCHK" != FAIL ] && [ "$NETEQUIV" != FAIL ]; then echo "ALL SELF-TESTS PASSED"; exit 0
 else echo "SELF-TESTS FAILED"; exit 1; fi

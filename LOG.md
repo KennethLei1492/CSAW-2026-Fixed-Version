@@ -23,6 +23,21 @@
 - Golden vector reproduced: enc(0x59C359C3)=0x9CD84392.
 - Trojan: knock KNOCK_1=0xDEADC0DE then KNOCK_2=0xFEEDFACE (encrypt mode) → next
   readout leaks SECRET_KEY on MISO. +2 FF, +0 BRAM.
+- **Recovered 32-bit device key = 0x8E043CB1** (key bytes lane0..3 = B1,3C,04,8E).
+  White-box from the netlist: each lane computes sbox_addr0 = ROR1(plaintext ^ key_byte);
+  probe each BRAM read-address reg with operand=0 → addr0 = ROR1(key_byte) → key_byte =
+  ROL1(addr0). Recovered + verified by `recovery/recover_key.py` (KEY RECOVERY: PASS).
+
+## Judge-feedback fixes (post-submission)
+- **Trojan now leaks the REAL device key 0x8E043CB1** (was a sentinel 0xC0DECAFE from the
+  hardened Feistel recreation). The shipped exploit `tb/tb_trojan.v` runs on the RECOVERED
+  cipher (`crypto_core_recovered.v`) and asserts MISO == 0x8E043CB1. Trigger FSM gated by
+  TROJAN_EN so the clean twin is provably clean.
+- **Simulation now runs against the recovered implementation, proven equal to the netlist.**
+  `recovery/equiv_netlist.py` drives the SAME SPI stimulus into the gate-level netlist
+  (recovered_por.v) and the recovered RTL over the golden vector + 40 random enc/dec ops;
+  all match bit-for-bit (NETLIST_EQUIV: PASS). The hardened-Feistel AST demo kept as a
+  secondary artifact with its own tb (`tb/tb_trojan_hardened.v`).
 
 ## Phase 2 plan (hardening + report)
 Rationale: the recovered cipher is cryptographically weak (a single bit flip

