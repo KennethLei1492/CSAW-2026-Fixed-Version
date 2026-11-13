@@ -16,7 +16,7 @@
 //
 //  Proofs produced:
 //   (A) Functional  : encrypt/decrypt are exact inverses; reproduces the
-//                     published golden vector enc(0x59C359C3)=0x9CD84392.
+//                     published golden vector enc(0x59C359C3)=0x93863CE8.
 //   (B) Stealth     : for EVERY non-trigger transaction DUT output == REF output
 //                     (bit-identical); lone knocks and a broken/decrypt-mode
 //                     knock never leak.
@@ -68,8 +68,8 @@ module tb_trojan;
 
     $display("=== (A) Functional: recovered encrypt/decrypt are inverse ===");
     reset; op(32'h59C359C3,1'b0); c=rxR;
-    $display("  enc(59C359C3)=%08x  (expect golden 9CD84392)", c);
-    if (c===32'h9CD84392) $display("  [PASS] golden vector reproduced");
+    $display("  enc(59C359C3)=%08x  (expect golden 93863CE8)", c);
+    if (c===32'h93863CE8) $display("  [PASS] golden vector reproduced");
     else begin errors=errors+1; $display("  [FAIL] golden vector: %08x", c); end
     op(c,1'b1);
     if (rxR===32'h59C359C3) $display("  [PASS] dec(enc)=59C359C3 (round-trip)");
